@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Alicia y Simón · Aula del Instituto de Formación Docente de El Colorado</title>
+<style>
+:root{--noche:#070b14;--crema:#f4efe2;--oro:#e0b85a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--noche);color:var(--crema);font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}
+body{display:grid;place-items:center}
+#stage{position:relative;width:min(100vw,177.78vh);aspect-ratio:16/9;overflow:hidden;background:#222}
+#stage svg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+#fondo{z-index:0}#mesa{z-index:2}
+iframe{position:absolute;z-index:1;border:0;background:transparent;pointer-events:none;width:26%;height:66%;top:18%}
+#f-simon{left:19.5%}#f-alicia{left:54.5%}
+#sub{position:absolute;z-index:3;top:2.2%;left:50%;transform:translateX(-50%);width:62%;min-height:7%;padding:.7em 1.1em;border-radius:12px;background:rgba(6,10,20,.78);border:1px solid rgba(224,184,90,.35);font-size:clamp(11px,1.45vw,22px);line-height:1.4;text-align:center;display:none}
+#sub b{color:var(--oro);margin-right:.4em}
+#barra{position:absolute;z-index:3;left:0;right:0;bottom:3.2%;display:flex;justify-content:center;gap:3%}
+.hablar{display:flex;align-items:center;gap:.6em;cursor:pointer;padding:.6em 1.3em;border-radius:999px;font:inherit;font-weight:600;font-size:clamp(11px,1.3vw,20px);color:var(--crema);background:rgba(20,12,6,.72);border:2px solid rgba(224,184,90,.55);transition:.15s}
+.hablar:hover{background:rgba(60,36,14,.9)}
+.hablar[aria-pressed=true]{background:#7c1b1f;border-color:#ffd27a}
+.hablar.habla{box-shadow:0 0 0 4px rgba(255,210,122,.45),0 0 28px rgba(255,210,122,.6)}
+.hablar small{font-weight:400;opacity:.75}
+@media (max-aspect-ratio:1/1){#stage{width:100vw}}
+</style>
+</head>
+<body>
+<div id="stage">
+<svg id="fondo" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-label="Aula de noche con pizarrón verde y ventana">
+<defs>
+ <linearGradient id="pared" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d8cfb8"/><stop offset="1" stop-color="#b3a98f"/></linearGradient>
+ <radialGradient id="lampara" cx=".5" cy="0" r=".7"><stop offset="0" stop-color="#fff6d8" stop-opacity=".55"/><stop offset="1" stop-color="#fff6d8" stop-opacity="0"/></radialGradient>
+ <linearGradient id="piso" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a7358"/><stop offset="1" stop-color="#5c4a38"/></linearGradient>
+ <linearGradient id="vidrio" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#050b1f"/><stop offset="1" stop-color="#1c2f5e"/></linearGradient>
+ <linearGradient id="haz" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe6ff" stop-opacity=".35"/><stop offset="1" stop-color="#cfe6ff" stop-opacity=".05"/></linearGradient>
+ <linearGradient id="pizarron" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2f6048"/><stop offset="1" stop-color="#244c3a"/></linearGradient>
+</defs>
+<rect width="1600" height="900" fill="url(#pared)"/>
+<rect y="640" width="1600" height="260" fill="url(#piso)"/>
+<g stroke="#00000022" stroke-width="2"><path d="M0 700H1600M0 770H1600M0 850H1600M200 640L-200 900M600 640L450 900M1000 640L1150 900M1400 640L1800 900"/></g>
+<rect y="620" width="1600" height="26" fill="#6e5d49"/>
+<!-- pizarrón -->
+<rect x="318" y="96" width="964" height="394" rx="8" fill="#8a5a2b"/>
+<rect x="334" y="112" width="932" height="362" fill="url(#pizarron)"/>
+<rect x="334" y="474" width="932" height="14" fill="#6f4720"/>
+<g fill="#e9e6da"><rect x="700" y="476" width="46" height="8" rx="3"/><rect x="760" y="477" width="28" height="7" rx="3" fill="#f3e08a"/></g>
+
+<!-- proyector y proyección -->
+<rect x="770" y="0" width="60" height="26" rx="6" fill="#3b3b3f"/><circle cx="800" cy="30" r="9" fill="#bfe0ff"/>
+<path d="M800 30L520 150H1080Z" fill="url(#haz)"/>
+<rect x="520" y="150" width="560" height="190" rx="4" fill="#e8f2ff" fill-opacity=".16" stroke="#cfe6ff" stroke-opacity=".5"/>
+<text x="800" y="228" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="64" fill="#f4fbff" letter-spacing="1">Formación</text>
+<text x="800" y="302" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="64" fill="#f4fbff" letter-spacing="1">Docente</text>
+<!-- ventana de noche -->
+<rect x="1334" y="150" width="236" height="410" rx="6" fill="#e9e4d6"/>
+<rect x="1348" y="164" width="208" height="382" fill="url(#vidrio)"/>
+<g fill="#fff"><circle cx="1380" cy="200" r="1.8"/><circle cx="1440" cy="188" r="1.4"/><circle cx="1500" cy="214" r="1.8"/><circle cx="1530" cy="260" r="1.4"/><circle cx="1400" cy="270" r="1.4"/><circle cx="1470" cy="300" r="1.6"/><circle cx="1370" cy="330" r="1.2"/></g>
+<circle cx="1490" cy="236" r="26" fill="#f6efc9"/><circle cx="1500" cy="230" r="22" fill="#0b1633" opacity=".18"/>
+<path d="M1348 546V470q30-30 52-6 20-52 54-14 30-40 60 8 22-12 42 4V546Z" fill="#050a14"/>
+<g stroke="#050a14" stroke-width="5" fill="none"><path d="M1400 546V430M1400 430q-34-12-50-4M1400 430q30-18 52-8M1400 430q-6-26 8-44"/></g>
+<g fill="#ffd27a"><circle cx="1420" cy="505" r="3"/><circle cx="1488" cy="500" r="3"/><circle cx="1520" cy="512" r="3"/></g>
+<rect x="1448" y="164" width="6" height="382" fill="#e9e4d6"/><rect x="1348" y="352" width="208" height="6" fill="#e9e4d6"/>
+<rect x="1322" y="556" width="260" height="14" rx="3" fill="#cfc7b2"/>
+<!-- reloj -->
+<circle cx="170" cy="250" r="54" fill="#f5f1e6" stroke="#4b4b4b" stroke-width="8"/><path d="M170 250V212M170 250L196 262" stroke="#222" stroke-width="5" stroke-linecap="round"/>
+<rect width="1600" height="640" fill="url(#lampara)"/>
+</svg>
+
+<iframe id="f-simon" src="simon.html" allow="microphone; autoplay" title="Simón, especialista en Psicoanálisis"></iframe>
+<iframe id="f-alicia" src="alicia.html" allow="microphone; autoplay" title="Alicia, formadora de docentes"></iframe>
+
+<svg id="mesa" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-label="Escritorio compartido con libros y una computadora">
+<defs><linearGradient id="madera" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b98348"/><stop offset="1" stop-color="#9a6a37"/></linearGradient></defs>
+<polygon points="290,556 1310,556 1360,622 240,622" fill="url(#madera)"/>
+<polygon points="290,556 1310,556 1312,562 288,562" fill="#d6a468" opacity=".7"/>
+<rect x="240" y="622" width="1120" height="278" fill="#7b5129"/>
+<rect x="240" y="622" width="1120" height="14" fill="#5d3b1c"/>
+<rect x="268" y="660" width="1064" height="240" fill="#6d4623"/>
+<rect x="780" y="636" width="40" height="264" fill="#5d3b1c" opacity=".55"/>
+<!-- libros de Simón -->
+<g transform="translate(330 0)">
+ <rect x="0" y="574" width="170" height="26" rx="3" fill="#7a1f24"/><rect x="0" y="574" width="170" height="5" fill="#e6c36a"/>
+ <rect x="10" y="548" width="154" height="26" rx="3" fill="#1f4f7a"/><rect x="10" y="548" width="154" height="5" fill="#e6c36a"/>
+ <rect x="-4" y="522" width="164" height="26" rx="3" fill="#3f6b3a"/><rect x="-4" y="522" width="164" height="5" fill="#e6c36a"/>
+ <rect x="14" y="498" width="140" height="24" rx="3" fill="#6b4a8a"/><rect x="14" y="498" width="140" height="4" fill="#e6c36a"/>
+ <rect x="4" y="474" width="150" height="24" rx="3" fill="#8a5a2b"/><rect x="4" y="474" width="150" height="4" fill="#e6c36a"/>
+ <rect x="-18" y="580" width="22" height="20" rx="2" fill="#d9d2bd"/>
+</g>
+<!-- computadora de Alicia (se ve la tapa) -->
+<g transform="translate(1090 0)">
+ <polygon points="0,596 190,596 204,606 -14,606" fill="#9aa0a8"/>
+ <rect x="8" y="470" width="174" height="128" rx="7" fill="#b9bfc7"/><rect x="8" y="470" width="174" height="128" rx="7" fill="none" stroke="#8d939b" stroke-width="3"/>
+ <circle cx="95" cy="534" r="12" fill="#e9edf2"/>
+</g>
+</svg>
+
+<div id="sub" role="status" aria-live="polite"></div>
+<div id="barra">
+ <button class="hablar" id="b-simon" aria-pressed="false">🎙 Hablar con Simón <small>psicoanálisis</small></button>
+ <button class="hablar" id="b-alicia" aria-pressed="false">🎙 Hablar con Alicia <small>formación docente</small></button>
+</div>
+</div>
+<script>
+const P = {
+  simon:  { f: document.getElementById('f-simon'),  b: document.getElementById('b-simon'),  n: 'Simón',  activo: false },
+  alicia: { f: document.getElementById('f-alicia'), b: document.getElementById('b-alicia'), n: 'Alicia', activo: false }
+};
+const sub = document.getElementById('sub');
+const otro = k => (k === 'simon' ? 'alicia' : 'simon');
+function alternar(k){
+  const a = P[k], o = P[otro(k)];
+  if (o.activo) o.f.contentWindow.postMessage({ cmd: 'terminar' }, '*');
+  a.f.contentWindow.postMessage({ cmd: a.activo ? 'terminar' : 'hablar' }, '*');
+}
+for (const k in P) P[k].b.addEventListener('click', () => alternar(k));
+addEventListener('message', e => {
+  const d = e.data; if (!d || !d.hd) return;
+  const k = e.source === P.simon.f.contentWindow ? 'simon' : 'alicia', p = P[k];
+  p.activo = d.activo;
+  p.b.setAttribute('aria-pressed', d.activo);
+  p.b.classList.toggle('habla', d.activo && d.modo === 'speaking');
+  if (!d.activo) { if (!P[otro(k)].activo) sub.style.display = 'none'; return; }
+  const lineas = (d.texto || '').split('\n').filter(Boolean);
+  if (!lineas.length) return;
+  const quien = lineas[1] === 'Vos' ? 'Vos' : p.n;
+  sub.innerHTML = ''; const b = document.createElement('b'); b.textContent = quien + ':';
+  sub.append(b, lineas[0]); sub.style.display = 'block';
+});
+</script>
+</body>
+</html>
