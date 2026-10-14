@@ -8,8 +8,9 @@
 :root{--noche:#070b14;--crema:#f4efe2;--oro:#e0b85a}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--noche);color:var(--crema);font-family:"Segoe UI",system-ui,sans-serif;overflow:hidden}
-body{display:grid;place-items:center}
-#stage{position:relative;width:min(100vw,177.78vh);aspect-ratio:16/9;overflow:hidden;background:#222}
+:root{--lado:clamp(230px,24vw,400px)}
+body{display:flex;align-items:center;justify-content:center}
+#stage{position:relative;flex:none;width:min(calc(100vw - var(--lado)),177.78vh);aspect-ratio:16/9;overflow:hidden;background:#222}
 .st{animation:tw 3.2s ease-in-out infinite}@keyframes tw{50%{opacity:.25}}@media(prefers-reduced-motion:reduce){.st{animation:none}}
 #mundo{position:absolute;inset:0;transform-origin:0 0;will-change:transform;z-index:1}
 #vig2,#fade{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0}
@@ -21,8 +22,13 @@ body{display:grid;place-items:center}
 #fondo{z-index:0}#mesa{z-index:2}
 iframe{position:absolute;z-index:1;border:0;background:transparent;pointer-events:none;width:26%;height:66%;top:18%}
 #f-simon{left:19.5%}#f-alicia{left:54.5%}
-#sub{position:absolute;z-index:3;top:2.2%;left:50%;transform:translateX(-50%);width:62%;min-height:7%;padding:.7em 1.1em;border-radius:12px;background:rgba(6,10,20,.78);border:1px solid rgba(224,184,90,.35);font-size:clamp(11px,1.45vw,22px);line-height:1.4;text-align:center;display:none}
-#sub b{color:var(--oro);margin-right:.4em}
+#sub{position:relative;flex:none;align-self:stretch;width:var(--lado);display:flex;flex-direction:column;justify-content:flex-end;gap:1.1em;padding:3.2em 1.1em 2em;background:linear-gradient(#0c0814,#150e20);border-left:1px solid rgba(224,184,90,.3);font-size:clamp(13px,1.3vw,20px);line-height:1.45;overflow:hidden}
+#sub::before{content:"Subtítulos";position:absolute;top:1.3em;left:1.2em;font-size:.68em;letter-spacing:.16em;text-transform:uppercase;color:#a89a78}
+#sub:empty{justify-content:center}#sub:empty::after{content:"Acá van a aparecer los subtítulos.";opacity:.45;font-size:.85em;text-align:center}
+.sl{transition:opacity .4s}.sl.vieja{opacity:.5}.sl.mas{opacity:.28}
+.sl b{display:block;font-size:.72em;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.15em}
+.sl.simon b{color:#8fb8ff}.sl.alicia b{color:#ff9fc4}.sl.vos b{color:#d0d0d0}.sl.aviso b{color:#ffd27a}
+.hablar[aria-pressed=true] small{display:none}#tema{flex:1 1 30%;min-width:30%}
 #panel{position:absolute;z-index:3;left:17%;right:17%;bottom:2.6%;display:flex;flex-direction:column;gap:1.4vmin}
 .fila{display:flex;justify-content:center;align-items:center;gap:1.2%;flex-wrap:wrap}
 #tema{flex:1;min-width:0;padding:.5em .9em;border-radius:999px;font:inherit;font-size:clamp(10px,1.15vw,17px);color:var(--crema);background:rgba(20,12,6,.72);border:1px solid rgba(224,184,90,.45)}
@@ -37,7 +43,7 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
 .hablar[aria-pressed=true]{background:#7c1b1f;border-color:#ffd27a}
 .hablar.habla{box-shadow:0 0 0 4px rgba(255,210,122,.45),0 0 28px rgba(255,210,122,.6)}
 .hablar small{font-weight:400;opacity:.75}
-@media (max-aspect-ratio:1/1){#stage{width:100vw}}
+@media (max-aspect-ratio:1/1){body{flex-direction:column;justify-content:flex-start}#stage{width:100vw}#sub{width:100vw;align-self:auto;flex:1;border-left:0;border-top:1px solid rgba(224,184,90,.3);justify-content:flex-start;padding-top:2.6em}}
 </style>
 </head>
 <body>
@@ -132,7 +138,6 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
 </svg></div>
 <div id="vig2"></div><div id="fade"></div>
 
-<div id="sub" role="status" aria-live="polite"></div>
 <div id="panel">
  <div class="fila">
   <input id="tema" type="text" value="cómo escuchar a los estudiantes en el aula" aria-label="Tema para que conversen" placeholder="Tema para que conversen">
@@ -157,6 +162,7 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
  <div class="fila"><button class="acc" id="g-play">▶ Reproducir</button><button class="acc" id="g-cerrar">Cerrar</button></div>
 </dialog>
 </div>
+<aside id="sub" role="status" aria-live="polite"></aside>
 <script>
 const $ = id => document.getElementById(id);
 const P = {
@@ -166,8 +172,15 @@ const P = {
 const sub = $('sub'), otro = k => (k === 'simon' ? 'alicia' : 'simon');
 let corrida = 0, ocupado = false;
 const envia = (k, m) => P[k].f.contentWindow.postMessage(m, '*');
-function aviso(t){ sub.textContent = t; sub.style.display = 'block'; }
-function mostrar(q, t){ sub.innerHTML = ''; const b = document.createElement('b'); b.textContent = q + ':'; sub.append(b, t); sub.style.display = 'block'; }
+function pintar(clase, q, t){
+  const d = document.createElement('div'); d.className = 'sl ' + clase;
+  const b = document.createElement('b'); b.textContent = q; d.append(b, t); sub.append(d);
+  while (sub.children.length > 4) sub.firstChild.remove();
+  [...sub.children].forEach((e, i, a) => { const r = a.length - 1 - i; e.classList.toggle('vieja', r === 1); e.classList.toggle('mas', r >= 2); });
+}
+function aviso(t){ pintar('aviso', 'Aviso', t); }
+function limpiar(){ sub.replaceChildren(); }
+function mostrar(q, t){ pintar(q === 'Simón' ? 'simon' : q === 'Alicia' ? 'alicia' : 'vos', q, t); }
 function refrescar(){
   for (const k in P){ const p = P[k];
     p.b.setAttribute('aria-pressed', p.activo);
@@ -193,7 +206,7 @@ async function alternar(k){
   const p = P[k]; parar();
   if (p.activo){ return; }
   if (!await permisoMic()) return;
-  sub.style.display = 'none'; p.intentando = true; envia(k, { cmd:'hablar' }); escena.modo = 'libre'; mirada();
+  limpiar(); p.intentando = true; envia(k, { cmd:'hablar' }); escena.modo = 'libre'; mirada();
   setTimeout(() => { if (P[k].modo === 'conectando') aviso('Sigue conectando… revisá tu internet y que el agente sea público en ElevenLabs (Security).'); }, 20000);
 }
 // Arranca una sesión sin micrófono (para los diálogos) y espera su saludo
@@ -214,7 +227,8 @@ async function turno(k, texto, id){
 async function sesion(fn){
   parar(); const id = ++corrida;
   ocupado = true;   // los diálogos usan un micrófono silencioso: no hace falta el tuyo
-  clearInterval(latido); latido = setInterval(() => { for (const k in P) if (P[k].activo && !P[k].turno) envia(k, { cmd:'actividad' }); }, 2500);   // el agente en espera no toma la palabra refrescar(); sub.style.display = 'none';
+  clearInterval(latido); latido = setInterval(() => { for (const k in P) if (P[k].activo && !P[k].turno) envia(k, { cmd:'actividad' }); }, 2000);   // el agente en espera no toma la palabra
+  refrescar(); limpiar();
   try { await arrancar('simon', id); await arrancar('alicia', id); escena.modo = 'dialogo'; mirada(); entrada(); await fn(id); aviso('Fin de la conversación.'); }
   catch (e){ if (e.message !== 'cancelado') aviso(e.message); }
   finally { if (id === corrida){ parar(); } }
