@@ -1748,6 +1748,7 @@ async function cargarSDK(){
   }
   throw new Error('sdk');
 }
+window.__hdConv = () => estado.conv;
 async function iniciarConversacion(){
   if (!CONFIG.agente){ subtitular('Este humano digital todavía no tiene agente de voz.', 'Probá «Escucharlo sin conectarse», o cargá el ID del agente en el Creador.'); return; }
   try { speechSynthesis.cancel(); } catch {} estado.demoHasta = 0; cortarLinea();
@@ -1767,7 +1768,7 @@ async function iniciarConversacion(){
       onAudioAlignment: (al) => { linea.pendiente = al; },
       onAudio: (b64) => { try { llegaAudio(b64); } catch {} },
       onInterruption: () => cortarLinea(),
-      onMessage: (m) => { const quien = m.source || m.role, txt = m.message || m.text || ''; if (!txt) return; (quien === 'ai' || quien === 'agent') ? subtitular(txt) : subtitular(txt, 'Vos'); }
+      onMessage: (m) => { try { parent.postMessage({hd:2, quien:(m.source||m.role), texto:(m.message||m.text||'')}, '*'); } catch {} const quien = m.source || m.role, txt = m.message || m.text || ''; if (!txt) return; (quien === 'ai' || quien === 'agent') ? subtitular(txt) : subtitular(txt, 'Vos'); }
     });
   } catch (e){
     console.error(e); terminarUI();
@@ -2162,8 +2163,10 @@ addEventListener('beforeunload', () => { try { estado.conv?.endSession(); } catc
 window.HD = { R, camera, controles, linea, llegaAudio, visemaTexto, boca: b => { bocaFija = b; }, fijar: (g, yaw) => { gestoForzado = g; Object.assign(poseI, GESTOS[g]); if (yaw !== undefined) cabezaRot.y = yaw; } };
 </script>
 <script>
-addEventListener('message',e=>{const d=e.data||{},b=document.getElementById('btnHablar'),on=b.getAttribute('aria-pressed')==='true';
- if(d.cmd==='hablar'&&!on)b.click(); if(d.cmd==='terminar'&&on)b.click();});
+addEventListener('message',e=>{const d=e.data||{},b=document.getElementById('btnHablar'),on=b.getAttribute('aria-pressed')==='true',c=window.__hdConv&&window.__hdConv();
+ if(d.cmd==='hablar'&&!on)b.click(); if(d.cmd==='terminar'&&on)b.click();
+ if(d.cmd==='texto'&&c){try{c.sendUserMessage(d.texto)}catch(x){console.error(x)}}
+ if(d.cmd==='silenciar'&&c){try{c.setMicMuted(!!d.valor)}catch(x){console.warn(x)}}});
 (()=>{const sub=document.getElementById('subtitulo'),est=document.getElementById('estado'),b=document.getElementById('btnHablar');
  const av=()=>parent.postMessage({hd:1,texto:sub.innerText,modo:est.dataset.modo,activo:b.getAttribute('aria-pressed')==='true'},'*');
  const o=new MutationObserver(av);o.observe(sub,{childList:true,subtree:true,characterData:true});

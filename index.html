@@ -16,7 +16,15 @@ iframe{position:absolute;z-index:1;border:0;background:transparent;pointer-event
 #f-simon{left:19.5%}#f-alicia{left:54.5%}
 #sub{position:absolute;z-index:3;top:2.2%;left:50%;transform:translateX(-50%);width:62%;min-height:7%;padding:.7em 1.1em;border-radius:12px;background:rgba(6,10,20,.78);border:1px solid rgba(224,184,90,.35);font-size:clamp(11px,1.45vw,22px);line-height:1.4;text-align:center;display:none}
 #sub b{color:var(--oro);margin-right:.4em}
-#barra{position:absolute;z-index:3;left:0;right:0;bottom:3.2%;display:flex;justify-content:center;gap:3%}
+#panel{position:absolute;z-index:3;left:17%;right:17%;bottom:2.6%;display:flex;flex-direction:column;gap:1.4vmin}
+.fila{display:flex;justify-content:center;align-items:center;gap:1.2%;flex-wrap:wrap}
+#tema{flex:1;min-width:0;padding:.5em .9em;border-radius:999px;font:inherit;font-size:clamp(10px,1.15vw,17px);color:var(--crema);background:rgba(20,12,6,.72);border:1px solid rgba(224,184,90,.45)}
+select{padding:.5em .6em;border-radius:999px;font:inherit;font-size:clamp(10px,1.15vw,17px);color:var(--crema);background:rgba(20,12,6,.72);border:1px solid rgba(224,184,90,.45)}
+.acc{cursor:pointer;padding:.5em 1em;border-radius:999px;font:inherit;font-weight:600;font-size:clamp(10px,1.15vw,17px);color:var(--crema);background:rgba(224,184,90,.18);border:1px solid rgba(224,184,90,.6)}
+.acc:hover{background:rgba(224,184,90,.32)}.parar{background:#7c1b1f;border-color:#ffd27a}
+dialog{width:min(640px,92vw);border:1px solid var(--oro);border-radius:14px;background:#14100a;color:var(--crema);padding:1.2em}
+dialog::backdrop{background:rgba(0,0,0,.6)}dialog h2{margin:0 0 .3em}dialog p{margin:.2em 0 .7em;opacity:.8;font-size:.95em}
+dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:.7em;border-radius:10px;background:#1d160d;color:var(--crema);border:1px solid rgba(224,184,90,.4);margin-bottom:.8em}
 .hablar{display:flex;align-items:center;gap:.6em;cursor:pointer;padding:.6em 1.3em;border-radius:999px;font:inherit;font-weight:600;font-size:clamp(11px,1.3vw,20px);color:var(--crema);background:rgba(20,12,6,.72);border:2px solid rgba(224,184,90,.55);transition:.15s}
 .hablar:hover{background:rgba(60,36,14,.9)}
 .hablar[aria-pressed=true]{background:#7c1b1f;border-color:#ffd27a}
@@ -96,36 +104,140 @@ iframe{position:absolute;z-index:1;border:0;background:transparent;pointer-event
 </svg>
 
 <div id="sub" role="status" aria-live="polite"></div>
-<div id="barra">
- <button class="hablar" id="b-simon" aria-pressed="false">🎙 Hablar con Simón <small>psicoanálisis</small></button>
- <button class="hablar" id="b-alicia" aria-pressed="false">🎙 Hablar con Alicia <small>formación docente</small></button>
+<div id="panel">
+ <div class="fila">
+  <input id="tema" type="text" value="cómo escuchar a los estudiantes en el aula" aria-label="Tema para que conversen" placeholder="Tema para que conversen">
+  <select id="turnos" aria-label="Cantidad de intercambios"><option value="4">4 turnos</option><option value="6" selected>6 turnos</option><option value="8">8 turnos</option></select>
+  <button class="acc" id="b-dialogo">💬 Que conversen</button>
+  <button class="acc" id="b-guion">📜 Guion</button>
+  <button class="acc parar" id="b-parar" hidden>■ Parar</button>
+ </div>
+ <div class="fila">
+  <button class="hablar" id="b-simon" aria-pressed="false">🎙 <span class="t">Hablar con Simón</span> <small>psicoanálisis</small></button>
+  <button class="hablar" id="b-alicia" aria-pressed="false">🎙 <span class="t">Hablar con Alicia</span> <small>formación docente</small></button>
+ </div>
 </div>
+<dialog id="dlg">
+ <h2>Guion</h2>
+ <p>Una intervención por línea, con el formato «Simón: texto» o «Alicia: texto». Cada personaje lo dice con su propia voz.</p>
+ <textarea id="guion" rows="11"></textarea>
+ <div class="fila"><button class="acc" id="g-play">▶ Reproducir</button><button class="acc" id="g-cerrar">Cerrar</button></div>
+</dialog>
 </div>
 <script>
+const $ = id => document.getElementById(id);
 const P = {
-  simon:  { f: document.getElementById('f-simon'),  b: document.getElementById('b-simon'),  n: 'Simón',  activo: false },
-  alicia: { f: document.getElementById('f-alicia'), b: document.getElementById('b-alicia'), n: 'Alicia', activo: false }
+  simon:  { f:$('f-simon'),  b:$('b-simon'),  n:'Simón',  activo:false, modo:'inactivo', nAI:0, texto:'', hablo:false, intentando:false },
+  alicia: { f:$('f-alicia'), b:$('b-alicia'), n:'Alicia', activo:false, modo:'inactivo', nAI:0, texto:'', hablo:false, intentando:false }
 };
-const sub = document.getElementById('sub');
-const otro = k => (k === 'simon' ? 'alicia' : 'simon');
-function alternar(k){
-  const a = P[k], o = P[otro(k)];
-  if (o.activo) o.f.contentWindow.postMessage({ cmd: 'terminar' }, '*');
-  a.f.contentWindow.postMessage({ cmd: a.activo ? 'terminar' : 'hablar' }, '*');
+const sub = $('sub'), otro = k => (k === 'simon' ? 'alicia' : 'simon');
+let corrida = 0, ocupado = false;
+const envia = (k, m) => P[k].f.contentWindow.postMessage(m, '*');
+function aviso(t){ sub.textContent = t; sub.style.display = 'block'; }
+function mostrar(q, t){ sub.innerHTML = ''; const b = document.createElement('b'); b.textContent = q + ':'; sub.append(b, t); sub.style.display = 'block'; }
+function refrescar(){
+  for (const k in P){ const p = P[k];
+    p.b.setAttribute('aria-pressed', p.activo);
+    p.b.classList.toggle('habla', p.activo && p.modo === 'speaking');
+    p.b.querySelector('.t').textContent = p.modo === 'conectando' ? 'Conectando…' : (p.activo ? 'Terminar con ' + p.n : 'Hablar con ' + p.n);
+  }
+  $('b-parar').hidden = !(ocupado || P.simon.activo || P.alicia.activo);
 }
+async function permisoMic(){
+  try { (await navigator.mediaDevices.getUserMedia({ audio:true })).getTracks().forEach(t => t.stop()); return true; }
+  catch { aviso('Para conversar hace falta el micrófono. Permitilo en el candado de la barra de direcciones y volvé a intentar.'); return false; }
+}
+function parar(){ corrida++; ocupado = false; for (const k in P) if (P[k].activo) envia(k, { cmd:'terminar' }); refrescar(); }
+const esperar = (cond, ms, id) => new Promise((ok, no) => { const t0 = Date.now();
+  const iv = setInterval(() => { if (id !== corrida){ clearInterval(iv); no(new Error('cancelado')); } else if (cond()){ clearInterval(iv); ok(true); } else if (Date.now() - t0 > ms){ clearInterval(iv); ok(false); } }, 150); });
+const listo = p => p.nAI > p.nAI0 && p.hablo && p.modo !== 'speaking';
+function reiniciar(p){ p.nAI0 = p.nAI; p.hablo = false; p.texto = ''; }
+
+// Conversación libre con uno de los dos (con tu micrófono)
+async function alternar(k){
+  const p = P[k]; parar();
+  if (p.activo){ return; }
+  if (!await permisoMic()) return;
+  sub.style.display = 'none'; p.intentando = true; envia(k, { cmd:'hablar' });
+  setTimeout(() => { if (P[k].modo === 'conectando') aviso('Sigue conectando… revisá tu internet y que el agente sea público en ElevenLabs (Security).'); }, 20000);
+}
+// Arranca una sesión sin micrófono (para los diálogos) y espera su saludo
+async function arrancar(k, id){
+  const p = P[k]; reiniciar(p); p.intentando = true; envia(k, { cmd:'hablar' });
+  if (!await esperar(() => p.activo, 25000, id)) throw new Error('No se pudo conectar con ' + p.n + '. Revisá tu internet y que el agente sea público.');
+  envia(k, { cmd:'silenciar', valor:true });
+  await esperar(() => listo(p), 40000, id); await esperar(() => false, 500, id);
+}
+async function turno(k, texto, id){
+  const p = P[k]; reiniciar(p); envia(k, { cmd:'texto', texto });
+  if (!await esperar(() => listo(p), 70000, id)) throw new Error(p.n + ' no respondió. Probá de nuevo.');
+  await esperar(() => false, 600, id); return p.texto;
+}
+async function sesion(fn){
+  parar(); const id = ++corrida;
+  if (!await permisoMic()) return;
+  ocupado = true; refrescar(); sub.style.display = 'none';
+  try { await arrancar('simon', id); await arrancar('alicia', id); await fn(id); aviso('Fin de la conversación.'); }
+  catch (e){ if (e.message !== 'cancelado') aviso(e.message); }
+  finally { if (id === corrida){ parar(); } }
+}
+
+// Modalidad 1: diálogo en vivo, la página hace de intermediaria entre los dos agentes
+function dialogo(){ sesion(async id => {
+  const tema = $('tema').value.trim() || 'la formación docente', N = +$('turnos').value;
+  let actual = 'simon', dice = P.alicia.texto;
+  for (let i = 0; i < N; i++){
+    const o = otro(actual), a = P[actual].n, b = P[o].n;
+    const m = i === 0
+      ? `[Estás conversando en un aula con ${b}, otro personaje digital; no hay ningún visitante. Tema de hoy: ${tema}. Hablale a ${b} en 2 o 3 oraciones, sin presentarte de nuevo y sin preguntarle qué necesita. ${b} dice: «${dice}»]`
+      : `[${b} dice: «${dice}». Respondele a ${b} en 2 o 3 oraciones, siguiendo el tema, sin presentarte ni saludar de nuevo.]`;
+    dice = await turno(actual, m, id); actual = o;
+  }
+}); }
+
+// Modalidad 2: guion escrito, cada personaje dice su línea
+const GUION = `Alicia: Simón, hoy charlábamos con los estudiantes del Instituto sobre qué significa escuchar en el aula.
+Simón: Es una buena pregunta, Alicia. En psicoanálisis escuchar no es solo oír las palabras: es prestar atención a lo que se dice entre líneas, a un lapsus, a un silencio.
+Alicia: En la formación docente pasa algo parecido. A veces un estudiante dice que no entendió, y lo que quiere decir es que le da miedo preguntar.
+Simón: Exacto. Y quien enseña también habla desde su propia historia, aunque no siempre lo note.
+Alicia: Por eso me gusta pensar la práctica con preguntas más que con recetas.
+Simón: Las preguntas abren y las recetas cierran. Aunque una buena pregunta siempre incomoda un poco.
+Alicia: Un poco de incomodidad bien acompañada es parte de aprender.
+Simón: Y de enseñar. Gracias por la charla, Alicia.`;
+$('guion').value = GUION;
+function leerGuion(){
+  return $('guion').value.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const m = l.match(/^([^:]{1,20}):\s*(.+)$/); if (!m) return null;
+    const n = m[1].trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return n === 'simon' ? ['simon', m[2]] : n === 'alicia' ? ['alicia', m[2]] : null;
+  }).filter(Boolean);
+}
+function guion(){
+  const L = leerGuion(); if (!L.length){ aviso('El guion está vacío o no tiene el formato «Simón: texto» / «Alicia: texto».'); return; }
+  $('dlg').close();
+  sesion(async id => { for (const [k, t] of L)
+    await turno(k, `[Escena guionada. Decí exactamente esta frase, sin agregar ni cambiar nada, sin saludar ni presentarte: «${t}»]`, id); });
+}
+
 for (const k in P) P[k].b.addEventListener('click', () => alternar(k));
+$('b-dialogo').addEventListener('click', dialogo);
+$('b-guion').addEventListener('click', () => $('dlg').showModal());
+$('g-play').addEventListener('click', guion);
+$('g-cerrar').addEventListener('click', () => $('dlg').close());
+$('b-parar').addEventListener('click', () => { parar(); aviso('Conversación detenida.'); });
+
 addEventListener('message', e => {
   const d = e.data; if (!d || !d.hd) return;
   const k = e.source === P.simon.f.contentWindow ? 'simon' : 'alicia', p = P[k];
-  p.activo = d.activo;
-  p.b.setAttribute('aria-pressed', d.activo);
-  p.b.classList.toggle('habla', d.activo && d.modo === 'speaking');
-  if (!d.activo) { if (!P[otro(k)].activo) sub.style.display = 'none'; return; }
-  const lineas = (d.texto || '').split('\n').filter(Boolean);
-  if (!lineas.length) return;
-  const quien = lineas[1] === 'Vos' ? 'Vos' : p.n;
-  sub.innerHTML = ''; const b = document.createElement('b'); b.textContent = quien + ':';
-  sub.append(b, lineas[0]); sub.style.display = 'block';
+  if (d.hd === 1){
+    p.activo = d.activo; p.modo = d.modo; if (d.modo === 'speaking') p.hablo = true;
+    if (d.activo) p.intentando = false;
+    else if (d.modo === 'inactivo' && p.intentando && (d.texto || '').trim()){ aviso(d.texto.replace(/\n/g, ' · ')); p.intentando = false; }
+    refrescar();
+  } else if (d.hd === 2){
+    if (d.quien === 'ai' || d.quien === 'agent'){ p.nAI++; p.texto += (p.texto ? ' ' : '') + d.texto; mostrar(p.n, d.texto); }
+    else if (!ocupado && d.texto) mostrar('Vos', d.texto);
+  }
 });
 </script>
 </body>
