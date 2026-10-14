@@ -11,6 +11,12 @@ html,body{margin:0;height:100%;background:var(--noche);color:var(--crema);font-f
 body{display:grid;place-items:center}
 #stage{position:relative;width:min(100vw,177.78vh);aspect-ratio:16/9;overflow:hidden;background:#222}
 .st{animation:tw 3.2s ease-in-out infinite}@keyframes tw{50%{opacity:.25}}@media(prefers-reduced-motion:reduce){.st{animation:none}}
+#mundo{position:absolute;inset:0;transform-origin:0 0;will-change:transform;z-index:1}
+#vig2,#fade{position:absolute;inset:0;z-index:2;pointer-events:none;opacity:0}
+#vig2{background:radial-gradient(ellipse at center,transparent 45%,rgba(12,0,24,.6) 100%)}#fade{background:#000}
+#fondo,iframe{transition:filter .6s}
+.etq{display:flex;align-items:center;gap:.4em;font-size:clamp(10px,1.05vw,16px);color:var(--crema)}
+.etq select{font-size:inherit}
 #stage svg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
 #fondo{z-index:0}#mesa{z-index:2}
 iframe{position:absolute;z-index:1;border:0;background:transparent;pointer-events:none;width:26%;height:66%;top:18%}
@@ -36,7 +42,7 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
 </head>
 <body>
 <div id="stage">
-<svg id="fondo" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-label="Aula de noche, estilo animación 3D, con pizarrón verde y ventana">
+<div id="mundo"><svg id="fondo" viewBox="0 0 1600 900" preserveAspectRatio="none" aria-label="Aula de noche, estilo animación 3D, con pizarrón verde y ventana">
 <defs>
  <linearGradient id="pared" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6dfbf"/><stop offset="1" stop-color="#e4b88d"/></linearGradient>
  <linearGradient id="friso" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f9aa8"/><stop offset="1" stop-color="#2a7283"/></linearGradient>
@@ -123,7 +129,8 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
  <circle cx="95" cy="532" r="26" fill="#fff" opacity=".55" filter="url(#sb)"/><circle cx="95" cy="532" r="13" fill="#fff"/>
 </g>
 <rect width="1600" height="900" fill="url(#vig)"/>
-</svg>
+</svg></div>
+<div id="vig2"></div><div id="fade"></div>
 
 <div id="sub" role="status" aria-live="polite"></div>
 <div id="panel">
@@ -133,6 +140,10 @@ dialog textarea{width:100%;font:inherit;font-size:.95em;line-height:1.4;padding:
   <button class="acc" id="b-dialogo">💬 Que conversen</button>
   <button class="acc" id="b-guion">📜 Guion</button>
   <button class="acc parar" id="b-parar" hidden>■ Parar</button>
+ </div>
+ <div class="fila">
+  <label class="etq">🎥 <select id="camara" aria-label="Cámara"><option value="auto">Cámara automática</option><option value="general">Plano general</option><option value="dos">Plano de los dos</option><option value="simon">Medio: Simón</option><option value="alicia">Medio: Alicia</option><option value="cerrado">Primer plano</option></select></label>
+  <label class="etq"><input type="checkbox" id="efectos" checked> efectos de cámara</label>
  </div>
  <div class="fila">
   <button class="hablar" id="b-simon" aria-pressed="false">🎙 <span class="t">Hablar con Simón</span> <small>psicoanálisis</small></button>
@@ -169,7 +180,8 @@ async function permisoMic(){
   try { (await navigator.mediaDevices.getUserMedia({ audio:true })).getTracks().forEach(t => t.stop()); return true; }
   catch { aviso('Para conversar hace falta el micrófono. Permitilo en el candado de la barra de direcciones y volvé a intentar.'); return false; }
 }
-function parar(){ corrida++; ocupado = false; for (const k in P) if (P[k].activo) envia(k, { cmd:'terminar' }); refrescar(); }
+function parar(){ corrida++; ocupado = false; for (const k in P) if (P[k].activo) envia(k, { cmd:'terminar' });
+  escena.modo = 'ninguno'; for (const k in P){ if (mov[k].activo){ mov[k].hasta = mov[k].x; llegar(k); } volver(k); } refrescar(); }
 const esperar = (cond, ms, id) => new Promise((ok, no) => { const t0 = Date.now();
   const iv = setInterval(() => { if (id !== corrida){ clearInterval(iv); no(new Error('cancelado')); } else if (cond()){ clearInterval(iv); ok(true); } else if (Date.now() - t0 > ms){ clearInterval(iv); ok(false); } }, 150); });
 const listo = p => p.nAI > p.nAI0 && p.hablo && p.modo !== 'speaking';
@@ -180,7 +192,7 @@ async function alternar(k){
   const p = P[k]; parar();
   if (p.activo){ return; }
   if (!await permisoMic()) return;
-  sub.style.display = 'none'; p.intentando = true; envia(k, { cmd:'hablar' });
+  sub.style.display = 'none'; p.intentando = true; envia(k, { cmd:'hablar' }); escena.modo = 'libre'; mirada();
   setTimeout(() => { if (P[k].modo === 'conectando') aviso('Sigue conectando… revisá tu internet y que el agente sea público en ElevenLabs (Security).'); }, 20000);
 }
 // Arranca una sesión sin micrófono (para los diálogos) y espera su saludo
@@ -199,7 +211,7 @@ async function sesion(fn){
   parar(); const id = ++corrida;
   if (!await permisoMic()) return;
   ocupado = true; refrescar(); sub.style.display = 'none';
-  try { await arrancar('simon', id); await arrancar('alicia', id); await fn(id); aviso('Fin de la conversación.'); }
+  try { await arrancar('simon', id); await arrancar('alicia', id); escena.modo = 'dialogo'; mirada(); entrada(); await fn(id); aviso('Fin de la conversación.'); }
   catch (e){ if (e.message !== 'cancelado') aviso(e.message); }
   finally { if (id === corrida){ parar(); } }
 }
@@ -222,8 +234,8 @@ const GUION = `Alicia: Simón, hoy charlábamos con los estudiantes del Institut
 Simón: Es una buena pregunta, Alicia. En psicoanálisis escuchar no es solo oír las palabras: es prestar atención a lo que se dice entre líneas, a un lapsus, a un silencio.
 Alicia: En la formación docente pasa algo parecido. A veces un estudiante dice que no entendió, y lo que quiere decir es que le da miedo preguntar.
 Simón: Exacto. Y quien enseña también habla desde su propia historia, aunque no siempre lo note.
-Alicia: Por eso me gusta pensar la práctica con preguntas más que con recetas.
-Simón: Las preguntas abren y las recetas cierran. Aunque una buena pregunta siempre incomoda un poco.
+Alicia: Fijate en el pizarrón: formación docente es, ante todo, aprender a escuchar. Por eso prefiero las preguntas a las recetas.
+Simón: Las preguntas abren y las recetas cierran. En mis libros esa idea aparece una y otra vez.
 Alicia: Un poco de incomodidad bien acompañada es parte de aprender.
 Simón: Y de enseñar. Gracias por la charla, Alicia.`;
 $('guion').value = GUION;
@@ -241,6 +253,111 @@ function guion(){
     await turno(k, `[Escena guionada. Decí exactamente esta frase, sin agregar ni cambiar nada, sin saludar ni presentarte: «${t}»]`, id); });
 }
 
+
+/* ---------- Puntos autorizados, desplazamiento y mirada ----------
+   Los personajes solo se mueven detrás del escritorio, entre puntos fijos, y solo si hay un motivo
+   (señalar el pizarrón, mirar por la ventana, ir a los libros, dirigirse al otro). Nunca al azar.
+   Se conserva el orden (Simón a la izquierda de Alicia) y una separación mínima: no se atraviesan. */
+const X = { libros:.275, simon:.325, izq:.42, centro:.5, der:.58, alicia:.675, ventana:.725 };   // los extremos dejan el cuerpo siempre detrás del escritorio
+const SEP = .17, VEL = .07, HOGAR = { simon:X.simon, alicia:X.alicia };
+const escena = { modo:'ninguno' };
+const mov = { simon:{ x:X.simon, hasta:X.simon, activo:false, ultimo:-1e9, giro:0 }, alicia:{ x:X.alicia, hasta:X.alicia, activo:false, ultimo:-1e9, giro:0 } };
+window.__log = [];
+const norm = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const MOTIVOS = [
+  { re:/pizarr|proyecci|proyect|diapositiva|formacion docente|titulo/, ir:{ simon:'izq', alicia:'der' }, giro:{ simon:.9, alicia:-.9 }, txt:'señalar el pizarrón' },
+  { re:/ventana|afuera|la luna|noche|oscur/, ir:{ alicia:'ventana' }, giro:{ alicia:.7 }, txt:'mirar por la ventana' },
+  { re:/libro|lectura|leer|autor|bibliograf/, ir:{ simon:'libros' }, giro:{ simon:-.5 }, txt:'ir a sus libros' }
+];
+function mirada(){
+  if (escena.modo === 'dialogo'){ envia('simon', { cmd:'mirar', yaw:.25 }); envia('alicia', { cmd:'mirar', yaw:-.55 }); }
+  else for (const k in P) envia(k, { cmd:'mirar', yaw:null });
+}
+function llegar(k){
+  const m = mov[k]; m.activo = false; m.x = m.hasta; m.ultimo = performance.now();
+  P[k].f.style.left = (m.x - .13)*100 + '%';
+  envia(k, { cmd:'caminar', valor:0, dir:0 }); envia(k, { cmd:'girar', yaw:m.giro });
+  if (m.giro) envia(k, { cmd:'mirar', yaw:m.giro*.9 }); else mirada();
+}
+function ir(k, est, giro, forzar, motivo, pausa){
+  const m = mov[k], o = otro(k), x = X[est], ahora = performance.now();
+  if (m.activo || (!forzar && ahora - m.ultimo < (pausa || 12000))) return false;       // un solo desplazamiento por vez y con pausa entre ellos
+  const oFin = mov[o].hasta;
+  if (k === 'simon' ? x > oFin - SEP : x < oFin + SEP) return false;          // no se acerca tanto como para atravesar al otro
+  m.desde = m.x; m.hasta = x; m.t0 = ahora; m.dur = Math.max(400, Math.abs(x - m.x)/VEL*1000); m.giro = giro || 0;
+  window.__log.push(k + ' → ' + est + (motivo ? ' (' + motivo + ')' : ' (vuelve a su lugar)'));
+  if (Math.abs(x - m.x) < .01){ llegar(k); return true; }
+  m.activo = true; envia(k, { cmd:'caminar', valor:1, dir:Math.sign(x - m.x) });
+  return true;
+}
+function analizar(k, texto){
+  if (escena.modo === 'ninguno') return;
+  const t = norm(texto), o = otro(k), mot = MOTIVOS.find(r => r.re.test(t) && r.ir[k]);
+  if (mot) ir(k, mot.ir[k], mot.giro[k], false, mot.txt, 5000);
+  else if (escena.modo === 'dialogo' && t.includes(norm(P[o].n)) && t.length > 60) ir(k, k === 'simon' ? 'izq' : 'der', 0, false, 'se dirige a ' + P[o].n);
+}
+function volver(k){
+  const m = mov[k]; clearTimeout(m.vuelta);
+  if (m.activo){ m.vuelta = setTimeout(() => volver(k), 800); return; }
+  if (Math.abs(m.x - HOGAR[k]) > .01 || m.giro) ir(k, k, 0, true);
+}
+function finHabla(k){
+  if (escena.modo === 'ninguno') return;
+  if (escena.modo === 'dialogo') envia(otro(k), { cmd:'asentir' });            // el que escucha asiente al terminar el otro
+  clearTimeout(mov[k].vuelta); mov[k].vuelta = setTimeout(() => { if (P[k].modo !== 'speaking') volver(k); }, 2400);
+}
+function mover(now){
+  for (const k in mov){ const m = mov[k]; if (!m.activo) continue;
+    const u = Math.min(1, (now - m.t0)/m.dur), e = u*u*u*(u*(u*6 - 15) + 10);
+    m.x = m.desde + (m.hasta - m.desde)*e; P[k].f.style.left = (m.x - .13)*100 + '%';
+    if (u >= 1) llegar(k); }
+  if (mov.alicia.x - mov.simon.x < SEP*.97) for (const k in mov) if (mov[k].activo){ mov[k].hasta = mov[k].x; llegar(k); }   // salvaguarda
+}
+
+/* ---------- Cámara ---------- */
+const mundo = $('mundo'), stage = $('stage'), fondoEl = $('fondo'), vig2 = $('vig2'), fade = $('fade');
+const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cam = { x:.5, y:.5, z:1, plano:'', desde:0, filtro:'', hab:'', tHab:-1e9 };
+const clampN = (v, a, b) => Math.min(b, Math.max(a, v));
+function entrada(){ fade.style.transition = 'none'; fade.style.opacity = 1; requestAnimationFrame(() => requestAnimationFrame(() => { fade.style.transition = 'opacity 1.4s'; fade.style.opacity = 0; })); }
+function planoActual(){
+  const sel = $('camara').value, act = Object.keys(P).filter(k => P[k].activo), hab = act.find(k => P[k].modo === 'speaking');
+  const mueve = mov.simon.activo || mov.alicia.activo;
+  if (sel === 'cerrado') return 'cerrado:' + (hab || act[0] || 'simon');
+  if (sel !== 'auto') return sel;
+  if (!act.length && !ocupado) return 'general';
+  if (mueve) return 'dos';
+  if (escena.modo === 'libre') return act[0] || 'general';
+  if (hab){ cam.hab = hab; cam.tHab = performance.now(); return hab; }
+  return performance.now() - cam.tHab < 1800 && cam.hab ? cam.hab : 'dos';
+}
+function objetivo(p){
+  if (p === 'general') return { x:.5, y:.5, z:1 };
+  if (p === 'dos') return { x:(mov.simon.x + mov.alicia.x)/2, y:.55, z:1.3 };
+  const cerrado = p.startsWith('cerrado'), k = cerrado ? p.split(':')[1] : p;
+  return { x:mov[k].x, y:cerrado ? .47 : .52, z:cerrado ? 2.05 : 1.6 };
+}
+let tPrev = performance.now();
+function marco(now){
+  const dt = Math.min(.05, (now - tPrev)/1000); tPrev = now; mover(now);
+  const p = planoActual(); if (p !== cam.plano){ cam.plano = p; cam.desde = now; }
+  const o = objetivo(p), fx = $('efectos').checked && !quieto;
+  const empuje = fx && p !== 'general' ? Math.min(.12, (now - cam.desde)/1000*.012) : 0;    // acercamiento lento, solo cuando hay un plano con motivo
+  const k = quieto ? 1 : 1 - Math.exp(-1.8*dt);
+  cam.x += (o.x - cam.x)*k; cam.y += (o.y - cam.y)*k; cam.z += (o.z + empuje - cam.z)*k;
+  const z = cam.z, W = stage.clientWidth, H = stage.clientHeight;
+  const cx = clampN(cam.x, .5/z, 1 - .5/z), cy = clampN(cam.y, .5/z, 1 - .5/z), t = now/1000, g = Math.min(z, 1.6);
+  const mx = fx ? (Math.sin(t*.7)*1.3 + Math.sin(t*1.9 + 1)*.6)*g : 0, my = fx ? (Math.sin(t*.9 + 2)*1 + Math.sin(t*2.3)*.5)*g : 0;   // pulso de cámara en mano, apenas perceptible
+  mundo.style.transform = `translate(${W*(.5 - cx*z) + mx}px, ${H*(.5 - cy*z) + my}px) scale(${z})`;
+  vig2.style.opacity = fx ? clampN((z - 1)*.9, 0, .7) : 0;
+  // foco selectivo: al acercar a uno, el fondo y el otro personaje se desenfocan un poco
+  const b = fx ? Math.round(clampN((z - 1.15)*2.2, 0, 1.6)*4)/4 : 0, foco = p.startsWith('cerrado') ? p.split(':')[1] : (p === 'simon' || p === 'alicia' ? p : '');
+  const f = b + '|' + foco;
+  if (f !== cam.filtro){ cam.filtro = f; fondoEl.style.filter = b ? `blur(${b*1.2}px)` : ''; for (const kk in P) P[kk].f.style.filter = (b && foco && kk !== foco) ? `blur(${b*1.4}px)` : ''; }
+  requestAnimationFrame(marco);
+}
+requestAnimationFrame(marco);
+
 for (const k in P) P[k].b.addEventListener('click', () => alternar(k));
 $('b-dialogo').addEventListener('click', dialogo);
 $('b-guion').addEventListener('click', () => $('dlg').showModal());
@@ -252,12 +369,12 @@ addEventListener('message', e => {
   const d = e.data; if (!d || !d.hd) return;
   const k = e.source === P.simon.f.contentWindow ? 'simon' : 'alicia', p = P[k];
   if (d.hd === 1){
-    p.activo = d.activo; p.modo = d.modo; if (d.modo === 'speaking') p.hablo = true;
+    const antes = p.modo; p.activo = d.activo; p.modo = d.modo; if (d.modo === 'speaking') p.hablo = true; if (antes === 'speaking' && d.modo !== 'speaking') finHabla(k);
     if (d.activo) p.intentando = false;
     else if (d.modo === 'inactivo' && p.intentando && (d.texto || '').trim()){ aviso(d.texto.replace(/\n/g, ' · ')); p.intentando = false; }
     refrescar();
   } else if (d.hd === 2){
-    if (d.quien === 'ai' || d.quien === 'agent'){ p.nAI++; p.texto += (p.texto ? ' ' : '') + d.texto; mostrar(p.n, d.texto); }
+    if (d.quien === 'ai' || d.quien === 'agent'){ p.nAI++; p.texto += (p.texto ? ' ' : '') + d.texto; mostrar(p.n, d.texto); analizar(k, d.texto); }
     else if (!ocupado && d.texto) mostrar('Vos', d.texto);
   }
 });

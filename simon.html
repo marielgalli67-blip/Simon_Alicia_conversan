@@ -293,7 +293,7 @@ function subtitular(txt, pie){
 /* ---------------- Renderer y cámara ---------------- */
 const contenedor = $('escena');
 const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.max(2, Math.min(devicePixelRatio, 3)));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = AP.estilo === 'pixar' ? 1.12 : 1.0;
@@ -1816,6 +1816,42 @@ function visemaDe(ch){
   return VISEMAS[b] || (/\p{L}/u.test(b) ? [0.25, 0.2, 0, 0] : SILENCIO);
 }
 
+
+/* Gestos con motivo: se derivan de la alineación del audio (palabras y puntuación) y no del azar */
+const GESTO_PALABRAS = [
+  [/^(yo|mi|me|nosotros|nosotras|creo|pienso|siento|soy|estoy)$/, 'pecho'],
+  [/^(vos|ustedes|usted|te|tu|tus|sabes|mira|fijate|pensa|imagina|imaginate)$/, 'senalar'],
+  [/^(todo|todos|toda|todas|siempre|mucho|muchos|mundo|cada|infinito|enorme)$/, 'amplio'],
+  [/^(primero|segundo|tercero|uno|dos|tres|otro|otra|pero|aunque|nunca|nada|ningun|ninguna)$/, 'alzar'],
+  [/^(pregunta|preguntas|preguntar|pregunto|hola|buenas|bienvenidos|bienvenida|gracias)$/, 'abierta']
+];
+let nFrase = 0;
+function cuesDe(chars, ini, dura){
+  const cues = [], quita = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  let pal = '', p0 = 0, f0 = -1, nPal = 0, hayCue = false, ult = -1e9;
+  const poner = (ms, dur, g, ceja) => { ms = Math.max(0, ms); if (ms - ult < 1500) return false; ult = ms; cues.push({ ms, dur, g, ceja: !!ceja }); return true; };
+  const palabra = () => { if (!pal) return; const w = quita(pal), hit = GESTO_PALABRAS.find(([re]) => re.test(w)); nPal++; if (hit && poner(p0 - 150, 1100, hit[1])) hayCue = true; pal = ''; };
+  const frase = (i, signo) => {
+    if (signo === '?' && nPal >= 1 && f0 >= 0){ if (poner(f0 - 100, Math.min(1800, (ini[i] || 0) + (dura[i] || 0) - f0 + 200), 'abierta', true)) hayCue = true; }
+    else if (!hayCue && nPal >= 6 && f0 >= 0 && (nFrase++ % 2 === 0)) poner(f0 - 100, 1300, (nFrase % 4 < 2) ? 'abierta' : 'amplio');
+    nPal = 0; hayCue = false; f0 = -1;
+  };
+  for (let i = 0; i < chars.length; i++){
+    const c = chars[i];
+    if (/\p{L}/u.test(c)){ if (!pal){ p0 = ini[i] || 0; if (f0 < 0) f0 = p0; } pal += c; }
+    else { palabra(); if (/[.?!;:…]/.test(c)) frase(i, c); }
+  }
+  palabra();
+  return cues;
+}
+function cueActual(ahora){
+  let mejor = null;
+  for (const T of linea.tramos){ if (!T.cues) continue;
+    for (const c of T.cues){ const a = T.t0 + c.ms/1000/T.escala, b = a + c.dur/1000/T.escala;
+      if (ahora >= a && ahora <= b && (!mejor || a > mejor.a)) mejor = { g:c.g, a, b, ceja:c.ceja }; } }
+  return mejor;
+}
+
 const linea = { tramos:[], fin:0, anclado:true, formato:'pcm_16000', pendiente:null, ultimaAlineacion:-9 };
 const ahoraS = () => performance.now()/1000;
 function duracionAudio(b64){
@@ -1829,7 +1865,7 @@ function llegaAudio(b64){
   const t0 = linea.fin; linea.fin = t0 + dur;
   const al = linea.pendiente; linea.pendiente = null;
   if (al && al.chars?.length){
-    linea.tramos.push({ t0, dur, escala:1, chars:al.chars, ini:al.char_start_times_ms, dura:al.char_durations_ms });
+    linea.tramos.push({ t0, dur, escala:1, chars:al.chars, ini:al.char_start_times_ms, dura:al.char_durations_ms, cues:cuesDe(al.chars, al.char_start_times_ms, al.char_durations_ms) });
     linea.ultimaAlineacion = ahora;
   }
   linea.tramos = linea.tramos.filter(T => T.t0 + T.dur > ahora - 1);
@@ -1989,12 +2025,20 @@ const cabezaRot = new THREE.Vector3(), pechoRot = new THREE.Vector3(), ojosRot =
 let extraTorso = 0;
 const poseAsta = { ...(R.poseObj || ASTA) }, poseD = { ...GESTOS.reposo };
 let gestoD = 'reposo', proximoGestoD = 1;
+let gestoHasta = 0, cejaCue = 0, asiente = 0, camina = 0, caminaObj = 0, caminaDir = 0, giroObj = 0, giro = 0;
 
 let bocaFija = null, avisado = false;
 addEventListener('message', (e) => {
   const m = e.data || {};
   if (m.tipo === 'demo') demoHablar();
   if (m.tipo === 'callar'){ try { speechSynthesis.cancel(); } catch {} estado.demoHasta = 0; }
+});
+addEventListener('message', (e) => {
+  const m = e.data || {};
+  if (m.cmd === 'mirar') window.__mirarYaw = m.yaw == null ? null : m.yaw;
+  if (m.cmd === 'girar') giroObj = m.yaw || 0;
+  if (m.cmd === 'caminar'){ caminaObj = m.valor ? 1 : 0; caminaDir = m.dir || 0; }
+  if (m.cmd === 'asentir') asiente = 1;
 });
 const reloj = new THREE.Clock();
 function animar(){
@@ -2039,7 +2083,7 @@ function animar(){
   }
 
   // Cejas: se alzan en los énfasis y se fruncen al escuchar
-  const alzar = clamp(voz.pico*1.6 + (gestoActual === 'alzar' ? 0.4 : 0)) * AMP;
+  const alzar = clamp(voz.pico*1.6 + (gestoActual === 'alzar' ? 0.4 : 0) + cejaCue*0.55) * AMP;
   R.cejas.forEach(c => { c.position.y = alzar*0.0045 - (escuchando ? 0.0012 : 0); c.rotation.z = c.userData.s*(escuchando ? 0.05 : -alzar*0.06); });
 
   // Parpadeo
@@ -2060,13 +2104,13 @@ function animar(){
   R.cabeza.getWorldPosition(vTmp);
   const yawCuerpo = figura.raiz.rotation.y + R.pecho.rotation.y;
   const dxC = camera.position.x - vTmp.x, dzC = camera.position.z - vTmp.z;
-  let rel = Math.atan2(dxC, dzC) - yawCuerpo; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+  let rel = (window.__mirarYaw != null ? window.__mirarYaw : Math.atan2(dxC, dzC)) - yawCuerpo; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
   const alcanza = 1 - sstep(1.7, 2.4, Math.abs(rel));                      // si estás a su espalda, no se da vuelta
   const giroMel = MELERO ? 0.45 : 0;   // el melero mira de tres cuartos para lucir el hocico; los ojos compensan
   const yawCab = clamp(rel - giroMel, -0.85, 0.85)*alcanza;
   const yawTorso = clamp(rel - giroMel - yawCab, -0.3, 0.3)*alcanza;
   const yawOjos = clamp(rel - yawCab - yawTorso, -0.32, 0.32)*alcanza;
-  const cabeceo = clamp(Math.atan2(camera.position.y - vTmp.y, Math.hypot(dxC, dzC)), -0.45, 0.45)*alcanza;
+  const cabeceo = window.__mirarYaw != null ? 0 : clamp(Math.atan2(camera.position.y - vTmp.y, Math.hypot(dxC, dzC)), -0.45, 0.45)*alcanza;
   const yawObj = alLado ? 0.5 : yawCab + (hablando ? 0.08*Math.sin(t*0.7) : 0);
   proximaMirada -= dt;
   if (proximaMirada <= 0){ miradaObj.set(alLado ? 0.35 : (Math.random() - 0.5)*0.14, (Math.random() - 0.5)*0.08); proximaMirada = 0.7 + Math.random()*2; }
@@ -2081,23 +2125,20 @@ function animar(){
   }
   extraTorso = suave(extraTorso, conversa ? yawTorso : 0, 2, dt);
 
-  cabezaRot.x = suave(cabezaRot.x, (escuchando ? 0.06 : -0.01) - (conversa ? cabeceo*0.55 : 0) + voz.pico*0.09 + voz.energia*0.04*Math.sin(t*2.3), 6, dt);
+  cabezaRot.x = suave(cabezaRot.x, (escuchando ? 0.06 : -0.01) - (conversa ? cabeceo*0.55 : 0) + voz.pico*0.09, 6, dt);
   cabezaRot.y = suave(cabezaRot.y, yawObj + 0.05*Math.sin(t*0.37)*AMP, alLado ? 1.4 : 3, dt);
   cabezaRot.z = suave(cabezaRot.z, (escuchando ? 0.09 : 0.015*Math.sin(t*0.5)) + (hablando ? 0.05*Math.sin(t*0.83) : 0), 2.5, dt);
   R.cabeza.rotation.set(cabezaRot.x*AMP, cabezaRot.y, cabezaRot.z*AMP);
 
   // Gestos: cambia de ademán por frase y acompaña el ritmo de la voz
-  proximoGesto -= dt;
-  if (hablando && proximoGesto <= 0){
-    const opciones = ['abierta', 'abierta', 'senalar', 'pecho', 'alzar', 'amplio', 'reposo'];
-    gestoActual = opciones[Math.floor(Math.random()*opciones.length)];
-    proximoGesto = 1.6 + Math.random()*2.2;
-  }
-  if (!hablando) gestoActual = 'reposo';
+  const cuAct = hablando ? cueActual(ahoraS() + 0.18) : null;   // el ademán se adelanta ~150 ms a la voz
+  if (cuAct){ gestoActual = cuAct.g; gestoHasta = ahoraS() + 0.4; }
+  else if (!hablando || ahoraS() > gestoHasta) gestoActual = 'reposo';   // sin motivo, los brazos descansan
+  cejaCue = suave(cejaCue, cuAct && cuAct.ceja ? 1 : 0, 6, dt);
   if (gestoForzado) gestoActual = gestoForzado;
   const objetivo = R.poseObjI ? { ...R.poseObjI, hz: R.poseObjI.hz + (R.instrumento?.abre || 0)*1.6*AMP } : (R.guitarra ? POSES_OBJ.mastil : GESTOS[gestoActual]);
   for (const k in poseI) poseI[k] = suave(poseI[k], objetivo[k], hablando ? 4.5 : 2.5, dt);
-  const beatI = (R.poseObjI || R.guitarra) ? 0 : voz.pico*AMP + voz.energia*0.25*Math.sin(t*4.1)*AMP;
+  const beatI = (R.poseObjI || R.guitarra) ? 0 : voz.pico*AMP;
   aplicarPose(R.brazoI, poseI, beatI);
   // El brazo del asta acompaña: alza la bandera en los énfasis
   if (R.instrumento){ // bandoneón: el fuelle se abre y se cierra con la frase
@@ -2117,9 +2158,7 @@ function animar(){
     poseAsta.cx = suave(poseAsta.cx, P0.cx - voz.pico*0.12*AMP, 5, dt);
     aplicarPose(R.brazoD, poseAsta, 0);
   } else { // sin objeto, la otra mano también acompaña, con otro ritmo
-    proximoGestoD -= dt;
-    if (hablando && proximoGestoD <= 0){ const op = ['reposo', 'reposo', 'pecho', 'abierta', 'amplio']; gestoD = op[Math.floor(Math.random()*op.length)]; if (gestoD === gestoActual) gestoD = 'reposo'; proximoGestoD = 2 + Math.random()*2.5; }
-    if (!hablando) gestoD = 'reposo';
+    gestoD = (hablando && (gestoActual === 'abierta' || gestoActual === 'amplio')) ? gestoActual : 'reposo';
     const objD = GESTOS[gestoD];
     for (const k in poseD) poseD[k] = suave(poseD[k], objD[k], hablando ? 4 : 2.5, dt);
     aplicarPose(R.brazoD, poseD, voz.pico*0.5*AMP);
@@ -2135,6 +2174,13 @@ function animar(){
   const resp = Math.sin(t*1.25);
   R.torso.scale.set(1 + 0.008*resp, 1, 1 + 0.01*resp);
   R.pecho.position.y = 0.95 + 0.003*resp;
+  // Desplazamiento (detrás del escritorio): paso con rebote, leve inclinación y giro hacia donde va
+  camina = suave(camina, caminaObj, 6, dt);
+  giro = suave(giro, giroObj + caminaDir*0.18*camina, 2.4, dt);
+  figura.raiz.rotation.y = -0.2 + giro;
+  figura.raiz.position.y = suave(figura.raiz.position.y, 0.012*Math.abs(Math.sin(t*5.2))*camina, 14, dt);
+  R.pecho.rotation.z += camina*0.03*Math.sin(t*5.2);
+  if (asiente > 0){ asiente = Math.max(0, asiente - dt*1.6); R.cabeza.rotation.x += 0.12*Math.sin((1 - asiente)*Math.PI); }
 
   // Telas y laurel
   animarTelas(t*(menosMovimiento ? 0.3 : 1));
