@@ -2213,8 +2213,12 @@ addEventListener('beforeunload', () => { try { estado.conv?.endSession(); } catc
 window.HD = { R, camera, controles, linea, llegaAudio, visemaTexto, boca: b => { bocaFija = b; }, fijar: (g, yaw) => { gestoForzado = g; Object.assign(poseI, GESTOS[g]); if (yaw !== undefined) cabezaRot.y = yaw; } };
 </script>
 <script>
+const gum0=navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+const silencio=()=>{const ac=new (window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain(),d=ac.createMediaStreamDestination();g.gain.value=0;o.connect(g);g.connect(d);o.start();try{ac.resume()}catch(x){}return d.stream;};
 addEventListener('message',e=>{const d=e.data||{},b=document.getElementById('btnHablar'),on=b.getAttribute('aria-pressed')==='true',c=window.__hdConv&&window.__hdConv();
- if(d.cmd==='hablar'&&!on)b.click(); if(d.cmd==='terminar'&&on)b.click();
+ if(d.cmd==='hablar'&&!on){navigator.mediaDevices.getUserMedia=d.sinMic?(async()=>silencio()):gum0;b.click();} if(d.cmd==='terminar'&&on)b.click();
+ if(d.cmd==='volumen'&&c){try{c.setVolume({volume:d.valor})}catch(x){}}
+ if(d.cmd==='actividad'&&c){try{c.sendUserActivity()}catch(x){}}
  if(d.cmd==='texto'&&c){try{c.sendUserMessage(d.texto)}catch(x){console.error(x)}}
  if(d.cmd==='silenciar'&&c){try{c.setMicMuted(!!d.valor)}catch(x){console.warn(x)}}});
 (()=>{const sub=document.getElementById('subtitulo'),est=document.getElementById('estado'),b=document.getElementById('btnHablar');

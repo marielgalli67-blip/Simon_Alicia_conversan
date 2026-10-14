@@ -180,12 +180,13 @@ async function permisoMic(){
   try { (await navigator.mediaDevices.getUserMedia({ audio:true })).getTracks().forEach(t => t.stop()); return true; }
   catch { aviso('Para conversar hace falta el micrófono. Permitilo en el candado de la barra de direcciones y volvé a intentar.'); return false; }
 }
-function parar(){ corrida++; ocupado = false; for (const k in P) if (P[k].activo) envia(k, { cmd:'terminar' });
+let latido = null;
+function parar(){ clearInterval(latido); corrida++; ocupado = false; for (const k in P) if (P[k].activo) envia(k, { cmd:'terminar' });
   escena.modo = 'ninguno'; for (const k in P){ if (mov[k].activo){ mov[k].hasta = mov[k].x; llegar(k); } volver(k); } refrescar(); }
 const esperar = (cond, ms, id) => new Promise((ok, no) => { const t0 = Date.now();
   const iv = setInterval(() => { if (id !== corrida){ clearInterval(iv); no(new Error('cancelado')); } else if (cond()){ clearInterval(iv); ok(true); } else if (Date.now() - t0 > ms){ clearInterval(iv); ok(false); } }, 150); });
-const listo = p => p.nAI > p.nAI0 && p.hablo && p.modo !== 'speaking';
-function reiniciar(p){ p.nAI0 = p.nAI; p.hablo = false; p.texto = ''; }
+const listo = p => p.nAI > p.nAI0 && p.hablo && p.modo !== 'speaking' && p.dejo && performance.now() - p.dejo > 1300;
+function reiniciar(p){ p.nAI0 = p.nAI; p.hablo = false; p.dejo = 0; p.texto = ''; }
 
 // Conversación libre con uno de los dos (con tu micrófono)
 async function alternar(k){
@@ -197,20 +198,23 @@ async function alternar(k){
 }
 // Arranca una sesión sin micrófono (para los diálogos) y espera su saludo
 async function arrancar(k, id){
-  const p = P[k]; reiniciar(p); p.intentando = true; envia(k, { cmd:'hablar' });
+  const p = P[k]; reiniciar(p); p.turno = true; p.intentando = true; envia(k, { cmd:'hablar', sinMic:true });
   if (!await esperar(() => p.activo, 25000, id)) throw new Error('No se pudo conectar con ' + p.n + '. Revisá tu internet y que el agente sea público.');
   envia(k, { cmd:'silenciar', valor:true });
-  await esperar(() => listo(p), 40000, id); await esperar(() => false, 500, id);
+  await esperar(() => listo(p), 40000, id); await esperar(() => false, 500, id); p.turno = false;
 }
 async function turno(k, texto, id){
-  const p = P[k]; reiniciar(p); envia(k, { cmd:'texto', texto });
-  if (!await esperar(() => listo(p), 70000, id)) throw new Error(p.n + ' no respondió. Probá de nuevo.');
+  const p = P[k], o = P[otro(k)];
+  await esperar(() => o.modo !== 'speaking' && (!o.dejo || performance.now() - o.dejo > 900), 12000, id);   // nadie habla encima del otro
+  reiniciar(p); p.turno = true; envia(k, { cmd:'volumen', valor:1 }); envia(k, { cmd:'texto', texto });
+  const ok = await esperar(() => listo(p), 70000, id); p.turno = false;
+  if (!ok) throw new Error(p.n + ' no respondió. Probá de nuevo.');
   await esperar(() => false, 600, id); return p.texto;
 }
 async function sesion(fn){
   parar(); const id = ++corrida;
-  if (!await permisoMic()) return;
-  ocupado = true; refrescar(); sub.style.display = 'none';
+  ocupado = true;   // los diálogos usan un micrófono silencioso: no hace falta el tuyo
+  clearInterval(latido); latido = setInterval(() => { for (const k in P) if (P[k].activo && !P[k].turno) envia(k, { cmd:'actividad' }); }, 2500);   // el agente en espera no toma la palabra refrescar(); sub.style.display = 'none';
   try { await arrancar('simon', id); await arrancar('alicia', id); escena.modo = 'dialogo'; mirada(); entrada(); await fn(id); aviso('Fin de la conversación.'); }
   catch (e){ if (e.message !== 'cancelado') aviso(e.message); }
   finally { if (id === corrida){ parar(); } }
@@ -303,7 +307,7 @@ function volver(k){
 }
 function finHabla(k){
   if (escena.modo === 'ninguno') return;
-  if (escena.modo === 'dialogo') envia(otro(k), { cmd:'asentir' });            // el que escucha asiente al terminar el otro
+  if (escena.modo === 'dialogo' && performance.now() - (mov[k].asintio || 0) > 4000){ mov[k].asintio = performance.now(); envia(otro(k), { cmd:'asentir' }); }            // el que escucha asiente al terminar el otro
   clearTimeout(mov[k].vuelta); mov[k].vuelta = setTimeout(() => { if (P[k].modo !== 'speaking') volver(k); }, 2400);
 }
 function mover(now){
@@ -369,12 +373,15 @@ addEventListener('message', e => {
   const d = e.data; if (!d || !d.hd) return;
   const k = e.source === P.simon.f.contentWindow ? 'simon' : 'alicia', p = P[k];
   if (d.hd === 1){
-    const antes = p.modo; p.activo = d.activo; p.modo = d.modo; if (d.modo === 'speaking') p.hablo = true; if (antes === 'speaking' && d.modo !== 'speaking') finHabla(k);
+    const antes = p.modo; p.activo = d.activo; p.modo = d.modo;
+    if (d.modo === 'speaking'){ p.hablo = true; p.dejo = 0; if (ocupado && !p.turno) envia(k, { cmd:'volumen', valor:0 }); }
+    else if (antes === 'speaking'){ p.dejo = performance.now(); finHabla(k); }
     if (d.activo) p.intentando = false;
     else if (d.modo === 'inactivo' && p.intentando && (d.texto || '').trim()){ aviso(d.texto.replace(/\n/g, ' · ')); p.intentando = false; }
     refrescar();
   } else if (d.hd === 2){
-    if (d.quien === 'ai' || d.quien === 'agent'){ p.nAI++; p.texto += (p.texto ? ' ' : '') + d.texto; mostrar(p.n, d.texto); analizar(k, d.texto); }
+    if (d.quien === 'ai' || d.quien === 'agent'){ if (ocupado && !p.turno) return;   // fuera de su turno un agente no habla ni cuenta
+      p.nAI++; p.texto += (p.texto ? ' ' : '') + d.texto; mostrar(p.n, d.texto); analizar(k, d.texto); }
     else if (!ocupado && d.texto) mostrar('Vos', d.texto);
   }
 });
